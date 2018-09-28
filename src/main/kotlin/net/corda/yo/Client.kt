@@ -1,9 +1,18 @@
 package net.corda.yo
 
 import net.corda.client.rpc.CordaRPCClient
+import net.corda.core.flows.NotaryChangeFlow
+import net.corda.core.flows.StateReplacementException
+import net.corda.core.identity.CordaX500Name
+import net.corda.core.messaging.startFlow
+import net.corda.core.messaging.vaultQueryBy
 import net.corda.core.utilities.NetworkHostAndPort
+import net.corda.core.utilities.getOrThrow
 import net.corda.core.utilities.loggerFor
+import org.jgroups.util.Util.assertEquals
 import org.slf4j.Logger
+import java.time.Duration
+/*
 
 fun main(args: Array<String>) {
     YoRPC().main(args)
@@ -22,12 +31,31 @@ private class YoRPC {
         val proxy = client.start("user1", "test").proxy
         // Grab all signed transactions and all future signed transactions.
         val (transactions, futureTransactions) = proxy.internalVerifiedTransactionsFeed()
-        // Log the existing Yo's and listen for new ones.
-        futureTransactions.startWith(transactions).toBlocking().subscribe { transaction ->
-            transaction.tx.outputs.forEach { output ->
-                val state = output.data as YoState
-                logger.info(state.toString())
-            }
+        val pb = proxy.partiesFromName("PartyB", false)
+        val na = proxy.notaryPartyFromX500Name(CordaX500Name.parse("O=OldNotary,L=London,C=GB"))
+        val nb = proxy.notaryPartyFromX500Name(CordaX500Name.parse("O=NewNotary,L=London,C=GB"))
+        val evilNotary = proxy.notaryPartyFromX500Name(CordaX500Name.parse("O=EvilCorp,L=London,C=GB"))
+        val yo = YoState(proxy.nodeInfo().legalIdentities.first(), pb.first())
+        val future = proxy.startFlow(::YoFlow, pb.first())
+        val stx = future.returnValue.getOrThrow(Duration.ofMillis(5000))
+        // Check yo transaction is stored in the storage service.
+
+        println("Yo created with notary ${stx.notary}")
+
+        val aYoSR = proxy.vaultQueryBy<YoState>().states.first()
+        assertEquals(aYoSR.state.notary, na!!)
+        println("Yo sent to ${aYoSR.state.data.target} with notary ${aYoSR.state.notary}")
+        val ncf = proxy.startFlow(::NotaryChangeFlow.Requester, nb!!, listOf(aYoSR)).returnValue.getOrThrow(Duration.ofMillis(5000))
+        assertEquals(ncf[0].state.notary, nb!!)
+
+        val aYoSRNew = proxy.vaultQueryBy<YoState>().states.first()
+        println("Yo sent to ${aYoSRNew.state.data.target} changed notary to ${aYoSRNew.state.notary}")
+        try {
+            proxy.startFlow(::NotaryChangeFlow.Requester, evilNotary!!, listOf(aYoSRNew))
+            throw Exception("Should not have reached this.")
+        } catch (e: StateReplacementException) {
+            println("Flow failed because replacement rejected, as expected")
         }
     }
 }
+*/

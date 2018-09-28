@@ -3,8 +3,8 @@ version '4'
 
 buildscript {
     ext.corda_release_group = 'net.corda'
-    ext.corda_release_version = 'corda-3.0'
-    ext.corda_gradle_plugins_version = '3.0.9'
+    ext.corda_release_version = '3.2-corda'
+    ext.corda_gradle_plugins_version = '3.2.1'
     ext.kotlin_version = '1.1.60'
     ext.quasar_version = '0.7.6'
     ext.junit_version = '4.12'
@@ -50,23 +50,21 @@ sourceSets {
 }
 
 dependencies {
-    compile "org.jetbrains.kotlin:kotlin-stdlib-jre8:$kotlin_version"
-    testCompile "org.jetbrains.kotlin:kotlin-test:$kotlin_version"
-    testCompile "junit:junit:$junit_version"
+    compile group: 'org.jetbrains.kotlin', name: 'kotlin-stdlib-jre8', version: kotlin_version
+    testCompile group: 'org.jetbrains.kotlin', name: 'kotlin-test', version: kotlin_version
+    testCompile group: 'junit', name: 'junit', version: junit_version
 
     // Corda integration dependencies
-    cordaCompile "$corda_release_group:corda-core:$corda_release_version"
-    cordaCompile "$corda_release_group:corda-finance:$corda_release_version"
-    cordaCompile "$corda_release_group:corda-jackson:$corda_release_version"
-    cordaCompile "$corda_release_group:corda-rpc:$corda_release_version"
-    cordaCompile "$corda_release_group:corda-webserver-impl:$corda_release_version"
-    cordaRuntime "$corda_release_group:corda:$corda_release_version"
-    cordaRuntime "$corda_release_group:corda-webserver:$corda_release_version"
+    cordaCompile group: corda_release_group, name: 'corda-core', version: corda_release_version
+    cordaCompile group: corda_release_group, name: 'corda-finance', version: corda_release_version
+    cordaCompile group: corda_release_group, name: 'corda-jackson', version: corda_release_version
+    cordaCompile group: corda_release_group, name: 'corda-webserver-impl', version: corda_release_version
+    cordaCompile group: corda_release_group, name: 'corda-rpc', version: corda_release_version
+    cordaCompile group: corda_release_group, name: 'corda-node', version: corda_release_version
+    cordaRuntime group: corda_release_group, name: 'corda', version: corda_release_version
+    cordaRuntime group: corda_release_group, name: 'corda-webserver', version: corda_release_version
 
-    testCompile "$corda_release_group:corda-node-driver:$corda_release_version"
-
-    // CorDapp dependencies
-    // Specify your cordapp's dependencies below, including dependent cordapps
+    testCompile group: corda_release_group, name: 'corda-node-driver', version: corda_release_version
 }
 
 tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).all {
@@ -74,19 +72,39 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).all {
         languageVersion = "1.1"
         apiVersion = "1.1"
         jvmTarget = "1.8"
-        javaParameters = true   // Useful for reflection.
+        javaParameters = true // Useful for reflection.
     }
 }
 
 task deployNodes(type: net.corda.plugins.Cordform, dependsOn: ['jar']) {
     directory "./build/nodes"
     node {
-        name "O=Notary,L=London,C=GB"
+        name "O=OldNotary,L=London,C=GB"
         notary = [validating : true]
         p2pPort 10002
         rpcSettings {
             address("localhost:10003")
             adminAddress("localhost:10043")
+        }
+        cordapps = []
+    }
+    node {
+        name "O=NewNotary,L=London,C=GB"
+        notary = [validating : true]
+        p2pPort 10012
+        rpcSettings {
+            address("localhost:10013")
+            adminAddress("localhost:10050")
+        }
+        cordapps = []
+    }
+    node {
+        name "O=EvilCorp,L=London,C=GB"
+        notary = [validating : false]
+        p2pPort 10014
+        rpcSettings {
+            address("localhost:10015")
+            adminAddress("localhost:10051")
         }
         cordapps = []
     }
