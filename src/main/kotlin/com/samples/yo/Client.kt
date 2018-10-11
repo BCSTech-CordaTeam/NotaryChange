@@ -1,17 +1,5 @@
-package net.corda.yo
+package com.samples.yo
 
-import net.corda.client.rpc.CordaRPCClient
-import net.corda.core.flows.NotaryChangeFlow
-import net.corda.core.flows.StateReplacementException
-import net.corda.core.identity.CordaX500Name
-import net.corda.core.messaging.startFlow
-import net.corda.core.messaging.vaultQueryBy
-import net.corda.core.utilities.NetworkHostAndPort
-import net.corda.core.utilities.getOrThrow
-import net.corda.core.utilities.loggerFor
-import org.jgroups.util.Util.assertEquals
-import org.slf4j.Logger
-import java.time.Duration
 /*
 
 fun main(args: Array<String>) {

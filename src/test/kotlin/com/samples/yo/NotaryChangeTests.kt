@@ -1,9 +1,7 @@
-package net.corda.yo
+package com.samples.yo
+/*
 
-import com.nhaarman.mockito_kotlin.timeout
 import net.corda.core.crypto.generateKeyPair
-import net.corda.core.flows.FlowException
-import net.corda.core.flows.NotaryChangeFlow
 import net.corda.core.flows.StateReplacementException
 import net.corda.core.identity.CordaX500Name
 import net.corda.core.node.services.queryBy
@@ -12,11 +10,10 @@ import net.corda.core.node.services.vault.builder
 import net.corda.core.utilities.getOrThrow
 import net.corda.testing.core.getTestPartyAndCertificate
 import net.corda.testing.node.*
-import net.corda.yo.YoState.YoSchemaV1.PersistentYoState
+import com.samples.YoState.YoSchemaV1.PersistentYoState
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
-import java.time.Duration
 import kotlin.test.assertEquals
 import kotlin.test.fail
 
@@ -109,3 +106,4 @@ class NotaryChangeTests {
         }
     }
 }
+*/
