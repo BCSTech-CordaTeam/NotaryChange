@@ -18,6 +18,7 @@ import net.corda.core.transactions.TransactionBuilder
 import net.corda.core.utilities.ProgressTracker
 import net.corda.core.utilities.getOrThrow
 import net.corda.webserver.services.WebServerPluginRegistry
+import org.hibernate.Transaction
 import java.util.function.Function
 import javax.persistence.Column
 import javax.persistence.Entity
@@ -109,17 +110,16 @@ class YoFlow(val target: Party, val yo: String = "Yo!", val notary: Party? = nul
         val counterpartySession = initiateFlow(target)
         val fullySignedTx: SignedTransaction = subFlow(CollectSignaturesFlow(stx, setOf(counterpartySession), SIGNING.childProgressTracker()))
 
-        progressTracker.currentStep = VERIFYING
-        fullySignedTx.verify(serviceHub)
-
         progressTracker.currentStep = FINALISING
-        return subFlow(FinalityFlow(fullySignedTx, FINALISING.childProgressTracker()))
+        val finalTx = subFlow(FinalityFlow(fullySignedTx, setOf(target), FINALISING.childProgressTracker()))
+        finalTx.verify(serviceHub)
+        return finalTx
     }
 }
 
 @InitiatingFlow
 @StartableByRPC
-class YoMoveFlow(val originalYo: SecureHash, val newTarget: Party, val notary: Party? = null) : FlowLogic<SignedTransaction>() {
+class YoMoveFlow(val originalYo: String, val newTarget: Party, val notary: Party? = null) : FlowLogic<SignedTransaction>() {
 
     override val progressTracker: ProgressTracker = tracker()
 
@@ -139,6 +139,8 @@ class YoMoveFlow(val originalYo: SecureHash, val newTarget: Party, val notary: P
 
     @Suspendable
     override fun call(): SignedTransaction {
+        val originalYo = SecureHash.parse(originalYo)
+
         progressTracker.currentStep = FINDING
         val expression = builder { YoState.YoSchemaV1.PersistentYoState::yoHash.equal(originalYo.toString()) }
         val customQuery = QueryCriteria.VaultCustomQueryCriteria(expression)
@@ -168,16 +170,51 @@ class YoMoveFlow(val originalYo: SecureHash, val newTarget: Party, val notary: P
     }
 }
 
+@InitiatingFlow
+@StartableByRPC
+class YoNotaryChangeFlow(val originalYoHash: String, val newNotary: Party) : FlowLogic<List<StateAndRef<YoState>>>() {
+
+    override val progressTracker: ProgressTracker = tracker()
+
+    companion object {
+        object FINDING : ProgressTracker.Step("Finding the original Yo!")
+        object RENOTARISING : ProgressTracker.Step("Changing notary for original Yo.")
+        object VERIFYING : ProgressTracker.Step("Verifying the Yo!")
+        object FINALISING : ProgressTracker.Step("Sending the Yo!") {
+            override fun childProgressTracker() = FinalityFlow.tracker()
+        }
+
+        fun tracker() = ProgressTracker(FINDING, RENOTARISING, VERIFYING, FINALISING)
+    }
+
+    @Suspendable
+    override fun call(): List<StateAndRef<YoState>> {
+        val originalYo = SecureHash.parse(originalYoHash)
+
+        progressTracker.currentStep = FINDING
+        val expression = builder { YoState.YoSchemaV1.PersistentYoState::yoHash.equal(originalYo.toString()) }
+        val customQuery = QueryCriteria.VaultCustomQueryCriteria(expression)
+        val oldYo = serviceHub.vaultService.queryBy<YoState>(customQuery)
+
+        progressTracker.currentStep = RENOTARISING
+        return subFlow(TransactionInputNotaryChangeFlow(
+                serviceHub.validatedTransactions.getTransaction(oldYo.states.first().ref.txhash)?.toLedgerTransaction(serviceHub)
+                        ?: throw FlowException("Could not get transaction"),
+                setOf(newNotary)
+        )).map { serviceHub.toStateAndRef<YoState>(it.ref) }
+    }
+}
+
 // Contract and state.
 const val YO_CONTRACT_ID = "com.samples.yo.YoContract"
 
 class YoContract: Contract {
 
-    // Command.
+    // Commands
     class Send : TypeOnlyCommandData()
     class Move : TypeOnlyCommandData()
 
-    // Contract code.
+    // Contract code
     override fun verify(tx: LedgerTransaction) = requireThat {
         val command = tx.commands.single()
         when (command.value) {
@@ -186,7 +223,7 @@ class YoContract: Contract {
                 "There must be one output: The Yo!" using (tx.outputs.size == 1)
                 val yo = tx.outputsOfType<YoState>().single()
                 "No sending Yo's to yourself!" using (yo.target != yo.origin)
-                "The Yo! must be signed by the sender." using (yo.origin.owningKey == command.signers.single())
+                "The Yo! must be signed by the sender." using (yo.origin.owningKey in command.signers)
             }
             is Move -> {
                 "There must be one input: The original Yo" using (tx.inputs.size == 1)
@@ -196,7 +233,7 @@ class YoContract: Contract {
                 "Input and output Yo's must be equal aside from origin and target" using (input.yo == output.yo)
                 "Yo must actually go to a new target" using (input.target != output.target)
                 "No sending Yo's to yourself!" using (output.target != output.origin)
-                "The Yo! must be signed by the mover" using (input.target.owningKey == command.signers.single())
+                "The Yo! must be signed by the mover" using (input.target.owningKey in command.signers)
             }
             else -> throw IllegalArgumentException("Failed requirement: Flow must have a valid command.")
         }

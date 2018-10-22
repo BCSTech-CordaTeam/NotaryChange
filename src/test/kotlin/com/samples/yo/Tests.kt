@@ -80,7 +80,7 @@ class YoFlowTests {
             val bYo = b.services.vaultService.queryBy<YoState>().states.single().state.data
             assertEquals(bYo.toString(), yo.toString())
         }
-        val moveFlow = YoMoveFlow(yo.yoHash, c.info.legalIdentities.first())
+        val moveFlow = YoMoveFlow(yo.yoHash.toString(), c.info.legalIdentities.first())
         val bfuture = b.startFlow(moveFlow)
         network.runNetwork()
         val bstx = bfuture.getOrThrow()

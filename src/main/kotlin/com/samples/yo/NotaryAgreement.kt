@@ -2,9 +2,12 @@ package com.samples.yo
 
 import co.paralleluniverse.fibers.Suspendable
 import net.corda.core.flows.*
+import net.corda.core.identity.CordaX500Name
 import net.corda.core.identity.Party
+import net.corda.core.node.NodeInfo
 import net.corda.core.utilities.ProgressTracker
 import net.corda.core.utilities.unwrap
+import java.security.PublicKey
 
 /**
  * The initiating half of a multiparty flow to negotiate a set of mutually agreeable notaries.
@@ -14,7 +17,7 @@ import net.corda.core.utilities.unwrap
  */
 @InitiatingFlow
 @StartableByRPC
-class NotaryAgreementFlow(private val counterparties: List<Party>, private val proposedNotaries: Set<Party>) : FlowLogic<Set<Party>>() {
+class NotaryAgreementFlow(private val counterparties: Set<Party>, private val proposedNotaries: Set<Party>) : FlowLogic<Set<Party>>() {
 
     override val progressTracker: ProgressTracker = tracker()
 
@@ -28,9 +31,12 @@ class NotaryAgreementFlow(private val counterparties: List<Party>, private val p
     override fun call(): Set<Party> {
         progressTracker.currentStep = PROPOSING
         var potentialNotaries = proposedNotaries
-        counterparties.forEach {
+        for (it in counterparties) {
+            if (serviceHub.myInfo.legalIdentities.contains(it)) {
+                continue
+            }
             val counterpartySession = initiateFlow(it)
-            val approvedNotaries = counterpartySession.sendAndReceive<Set<Party>>(potentialNotaries).unwrap { it }
+            val approvedNotaries = counterpartySession.sendAndReceive<Set<Party>>(proposedNotaries).unwrap { it }
             potentialNotaries = potentialNotaries.intersect(approvedNotaries)
             if (potentialNotaries.isEmpty()) {
                 return potentialNotaries
@@ -42,7 +48,7 @@ class NotaryAgreementFlow(private val counterparties: List<Party>, private val p
 
 
 /**
- * The responding half of
+ * The responding half of a multiparty flow to negotiate a set of mutually agreeable notaries.
  */
 @InitiatedBy(NotaryAgreementFlow::class)
 class NotaryAgreementResponse(val counterpartySession: FlowSession): FlowLogic<Set<Party>>() {
@@ -61,7 +67,5 @@ class NotaryAgreementResponse(val counterpartySession: FlowSession): FlowLogic<S
         val response = proposal.intersect(serviceHub.networkMapCache.notaryIdentities)
         counterpartySession.send(response)
         return response
-
     }
 }
-
