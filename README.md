@@ -8,7 +8,7 @@ First, compile the project with `gradlew deployNodes`, and run the nodes with th
 
 In our scenario, PartyA will begin by sending a Yo to PartyB containing an extremely important legal agreement, which we can perform on PartyA's Corda Shell with  
 
-`start com.samples.yo.YoFlow target: PartyB, yo: "I'll give you $100,000,000", notary: null`
+`start com.samples.yo.YoFlow target: PartyB, yo: "I'll give you $100,000,000", notary: OldNotary`
 
 
 We can check this ran successfully on PartyB's shell with  
@@ -21,7 +21,7 @@ We make note of the yoHash field here, which we will use to refer to this yo fro
 
 PartyB decides that its associated entity PartyC should handle this vital agreement, and so elects to move the state to them, which we do with  
 
-`start com.samples.yo.YoMoveFlow originalYo: 5B104743A14A6F3B5FE1D4D7B0CEA408BFC079116DE9A4CD05AED7A14257D3B9, newTarget: PartyC, notary: null`
+`start com.samples.yo.YoMoveFlow originalYo: 5B104743A14A6F3B5FE1D4D7B0CEA408BFC079116DE9A4CD05AED7A14257D3B9, newTarget: PartyC, notary: OldNotary`
 
  
 Once again, we'll check that this worked by querying the vault in PartyC's shell  
