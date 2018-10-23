@@ -1,9 +1,41 @@
 # NotaryChange
-An implementation of the Corda Science Project for notary change transactions
+An implementation of the Corda Science Project for notary change transactions.
 
-In PartyA
-`start com.samples.yo.YoFlow target: "O=PartyB,L=New York,C=US", yo: "I will give you $100,000,000", notary: "O=OldNotary,L=London,C=GB"`
+# Running a Scenario
 
- + In PartyB: `run vaultQuery contractStateType: com.samples.yo.YoState`
- + Get YoHash, then `start com.samples.yo.YoMoveFlow originalYo: C3841C4245AF16F537B37773F2CE113EE75A2856CCA974F30B8986ADFB841B39, newTarget: "O=PartyC,L=New York,C=US", notary: "O=OldNotary,L=London,C=GB"`
- + 
+First, compile the project with `gradlew deployNodes`, and run the nodes with the files in `build/nodes`.
+
+
+In our scenario, PartyA will begin by sending a Yo to PartyB containing an extremely important legal agreement, which we can perform on PartyA's Corda Shell with  
+
+`start com.samples.yo.YoFlow target: PartyB, yo: "I'll give you $100,000,000", notary: null`
+
+
+We can check this ran successfully on PartyB's shell with  
+
+`run vaultQuery contractStateType: com.samples.yo.YoState`
+
+
+We make note of the yoHash field here, which we will use to refer to this yo from now on.
+
+
+PartyB decides that its associated entity PartyC should handle this vital agreement, and so elects to move the state to them, which we do with  
+
+`start com.samples.yo.YoMoveFlow originalYo: 5B104743A14A6F3B5FE1D4D7B0CEA408BFC079116DE9A4CD05AED7A14257D3B9, newTarget: PartyC, notary: null`
+
+ 
+Once again, we'll check that this worked by querying the vault in PartyC's shell  
+
+`run vaultQuery contractStateType: com.samples.yo.YoState`
+
+
+PartyC realises that the notarisation of this transaction should be transferred from the fed to the bank of england, and so coordinates to change the notary. We do this with  
+
+`start com.samples.yo.YoNotaryChangeFlow originalYoHash: 5B104743A14A6F3B5FE1D4D7B0CEA408BFC079116DE9A4CD05AED7A14257D3B9, newNotary: NewNotary`
+
+This coordinates with PartyB to agree on our new notary and then uses Corda's NotaryChangeFlow to make the actual change.
+
+
+Finally, we can verify the notary change by querying the states in PartyC and PartyB again
+
+`run vaultQuery contractStateType: com.samples.yo.YoState`
