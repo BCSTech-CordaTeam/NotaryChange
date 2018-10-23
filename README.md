@@ -44,4 +44,5 @@ Finally, we can verify the notary change by querying the states in PartyC and Pa
 # More Details & Automation
 
 We implement this same scenario in the [ScenarioTests.kt](test/main/kotlin/com/samples/yo/ScenarioTests.kt) file, for a bit more insight into how this would look with parts of the Corda API.
-If you'd like more insight into how the actual notary change process occurs, seek out YoNotaryChangeFlow in [Yo.kt](src/main/kotlin/com/samples/yo/yo.kt).
+If you'd like more insight into how the actual notary change process occurs, seek out YoNotaryChangeFlow in [Yo.kt](src/main/kotlin/com/samples/yo/Yo.kt).
+
