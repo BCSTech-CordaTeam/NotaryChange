@@ -74,7 +74,13 @@ class YoApi(val rpcOps: CordaRPCOps) {
     fun peers() = mapOf("peers" to rpcOps.networkMapSnapshot().map { it.legalIdentities.first().name })
 }
 
-// Flow.
+/**
+ * Sends a 'Yo!' to the given party, optionally using a specific notary.
+ *
+ * @property target The target to send a Yo! to
+ * @property yo The content of the Yo! to send
+ * @property notary The notary to use for this Yo!. If null, the initiating node will choose one randomly.
+ */
 @InitiatingFlow
 @StartableByRPC
 class YoFlow(val target: Party, val yo: String = "Yo!", val notary: Party? = null) : FlowLogic<SignedTransaction>() {
@@ -117,6 +123,13 @@ class YoFlow(val target: Party, val yo: String = "Yo!", val notary: Party? = nul
     }
 }
 
+/**
+ * Moves an existing Yo! to a new target.
+ *
+ * @property originalYo The txHash (transaction id) of an existing send or move containing the yo to move. We currently take this as a string due to an issue in the Corda Shell.
+ * @property newTarget The new party to move the yo to.
+ * @property notary The notary to use for this move. If null, the initiating node will choose one randomly.
+ */
 @InitiatingFlow
 @StartableByRPC
 class YoMoveFlow(val originalYo: String, val newTarget: Party, val notary: Party? = null) : FlowLogic<SignedTransaction>() {
@@ -142,9 +155,15 @@ class YoMoveFlow(val originalYo: String, val newTarget: Party, val notary: Party
         val originalYo = SecureHash.parse(originalYo)
 
         progressTracker.currentStep = FINDING
-        val expression = builder { YoState.YoSchemaV1.PersistentYoState::yoHash.equal(originalYo.toString()) }
-        val customQuery = QueryCriteria.VaultCustomQueryCriteria(expression)
-        val oldYo = serviceHub.vaultService.queryBy<YoState>(customQuery).states.single()
+        val tx = serviceHub.validatedTransactions.getTransaction(originalYo)?.toLedgerTransaction(serviceHub)
+                ?: throw FlowException("Could not get transation.")
+
+        if (!(tx.commands.single().value is YoContract.Move || tx.commands.single().value is YoContract.Send)) {
+            throw FlowException("Transaction specified was not a Yo move or a Yo send.")
+        }
+
+        val oldYo = tx.outRef<YoState>(0)
+
 
         progressTracker.currentStep = CREATING
         val me = serviceHub.myInfo.legalIdentities.first()
@@ -170,9 +189,15 @@ class YoMoveFlow(val originalYo: String, val newTarget: Party, val notary: Party
     }
 }
 
+/**
+ * Changes a chain of Yo!s to use a single, specific notary.
+ *
+ * @property originalYo The txHash (transaction id) of an existing send or move containing the yo to move. We currently take this as a string due to an issue in the Corda Shell.
+ * @property newNotary The notary to attempt to renotarise the chain of transactions with.
+ */
 @InitiatingFlow
 @StartableByRPC
-class YoNotaryChangeFlow(val originalYoHash: String, val newNotary: Party) : FlowLogic<List<StateAndRef<YoState>>>() {
+class YoNotaryChangeFlow(val originalYo: String, val newNotary: Party) : FlowLogic<List<StateAndRef<YoState>>>() {
 
     override val progressTracker: ProgressTracker = tracker()
 
@@ -189,19 +214,19 @@ class YoNotaryChangeFlow(val originalYoHash: String, val newNotary: Party) : Flo
 
     @Suspendable
     override fun call(): List<StateAndRef<YoState>> {
-        val originalYo = SecureHash.parse(originalYoHash)
+        val originalYo = SecureHash.parse(originalYo)
 
         progressTracker.currentStep = FINDING
-        val expression = builder { YoState.YoSchemaV1.PersistentYoState::yoHash.equal(originalYo.toString()) }
-        val customQuery = QueryCriteria.VaultCustomQueryCriteria(expression)
-        val oldYo = serviceHub.vaultService.queryBy<YoState>(customQuery)
+        val tx = serviceHub.validatedTransactions.getTransaction(originalYo)?.toLedgerTransaction(serviceHub)
+                ?: throw FlowException("Could not get transaction.")
+
+        if (!(tx.commands.single().value is YoContract.Move || tx.commands.single().value is YoContract.Send)) {
+            throw FlowException("Transaction specified was not a Yo move or a Yo send.")
+        }
 
         progressTracker.currentStep = RENOTARISING
-        return subFlow(TransactionInputNotaryChangeFlow(
-                serviceHub.validatedTransactions.getTransaction(oldYo.states.first().ref.txhash)?.toLedgerTransaction(serviceHub)
-                        ?: throw FlowException("Could not get transaction"),
-                setOf(newNotary)
-        )).map { serviceHub.toStateAndRef<YoState>(it.ref) }
+        // Pawn the process off to a more general flow.
+        return subFlow(TransactionInputNotaryChangeFlow(tx, setOf(newNotary))).map { serviceHub.toStateAndRef<YoState>(it.ref) }
     }
 }
 
@@ -245,11 +270,10 @@ data class YoState(val origin: Party,
                    val target: Party,
                    val yo: String = "Yo!") : ContractState, QueryableState {
     override val participants get() = listOf(target, origin)
-    val yoHash: SecureHash = SecureHash.sha256(yo)
     override fun toString() = "From ${origin.name} to ${target.name}: $yo"
     override fun supportedSchemas() = listOf(YoSchemaV1)
     override fun generateMappedObject(schema: MappedSchema) = YoSchemaV1.PersistentYoState(
-            origin.name.toString(), target.name.toString(), yo, yoHash.toString())
+            origin.name.toString(), target.name.toString(), yo)
 
     object YoSchema
 
@@ -262,9 +286,7 @@ data class YoState(val origin: Party,
                 @Column(name = "target")
                 var target: String = "",
                 @Column(name = "yo")
-                var yo: String = "",
-                @Column(name = "yoHash")
-                var yoHash: String = ""
+                var yo: String = ""
         ) : PersistentState()
     }
 }

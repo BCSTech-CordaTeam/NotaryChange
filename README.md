@@ -8,7 +8,7 @@ First, compile the project with `gradlew deployNodes`, and run the nodes with th
 
 In our scenario, PartyA will begin by sending a Yo to PartyB containing an extremely important legal agreement, which we can perform on PartyA's Corda Shell with  
 
-`start com.samples.yo.YoFlow target: PartyB, yo: "I'll give you $100,000,000", notary: OldNotary`
+`start com.samples.yo.YoFlow target: PartyB, yo: "I'll give you $100,000,000", notary: Federal Reserve`
 
 
 We can check this ran successfully on PartyB's shell with  
@@ -16,22 +16,22 @@ We can check this ran successfully on PartyB's shell with
 `run vaultQuery contractStateType: com.samples.yo.YoState`
 
 
-We make note of the yoHash field here, which we will use to refer to this yo from now on.
+We make note of the txHash field here, which we will use to refer to this yo from now on.
 
 
 PartyB decides that its associated entity PartyC should handle this vital agreement, and so elects to move the state to them, which we do with  
 
-`start com.samples.yo.YoMoveFlow originalYo: 5B104743A14A6F3B5FE1D4D7B0CEA408BFC079116DE9A4CD05AED7A14257D3B9, newTarget: PartyC, notary: OldNotary`
+`start com.samples.yo.YoMoveFlow originalYo: <txHash>, newTarget: PartyC, notary: Federal Reserve`
 
  
-Once again, we'll check that this worked by querying the vault in PartyC's shell  
+Once again, we'll check that this worked by querying the vault in PartyC's shell. We will need to also note the txHash for the next step
 
 `run vaultQuery contractStateType: com.samples.yo.YoState`
 
 
-PartyC realises that the notarisation of this transaction should be transferred from the fed to the bank of england, and so coordinates to change the notary. We do this with  
+PartyC realises that the notarisation of this transaction should be transferred from the Fed to the Bank of England, and so coordinates to change the notary. We do this with  
 
-`start com.samples.yo.YoNotaryChangeFlow originalYoHash: 5B104743A14A6F3B5FE1D4D7B0CEA408BFC079116DE9A4CD05AED7A14257D3B9, newNotary: NewNotary`
+`start com.samples.yo.YoNotaryChangeFlow originalYo: <txHash>, newNotary: Bank of England`
 
 This coordinates with PartyB to agree on our new notary and then uses Corda's NotaryChangeFlow to make the actual change.
 
