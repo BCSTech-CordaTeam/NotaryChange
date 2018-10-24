@@ -40,6 +40,13 @@ Finally, we can verify the notary change by querying the states in PartyC and Pa
 
 `run vaultQuery contractStateType: com.samples.yo.YoState`
 
+# Yo Changes
+
+The Cordapp we're using is based on the Yo! Cordapp. For those familiar with that cordapp, it might be helpful to note the following changes:
+
+ - States & Flow updated so that both parties are signing participants of the YoStates.
+ - Addition of a move command.
+ - Addition of a notary change command.
 
 # More Details & Automation
 

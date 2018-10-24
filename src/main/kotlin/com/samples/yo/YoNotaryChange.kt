@@ -39,8 +39,10 @@ class TransactionInputNotaryChangeFlow(private val inputTransaction: LedgerTrans
         val newNotary = notaryAgreement()
 
         progressTracker.currentStep = CHANGING
+        // For every input and output in the transaction, invoke the NotaryChangeFlow to change the chain of notaries.
         val inTx = inputTransaction.inputs.mapNotNull {
             if (serviceHub.keyManagementService.filterMyKeys(it.state.data.participants.map { it.owningKey }).count() > 0) {
+                // We only proceed to notary change if we're actually a participant of this state.
                 subFlow(NotaryChangeFlow(it, newNotary))
             } else {
                 null
@@ -57,6 +59,9 @@ class TransactionInputNotaryChangeFlow(private val inputTransaction: LedgerTrans
         return inTx + outTx
     }
 
+    /**
+     * Helper function to facilitate calling the NotaryAgreementFlow
+     */
     @Suspendable
     private fun notaryAgreement(): Party {
         val counterparties = sequenceOf(

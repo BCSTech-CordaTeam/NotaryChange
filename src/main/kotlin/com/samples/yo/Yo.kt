@@ -97,7 +97,7 @@ class YoFlow(val target: Party, val yo: String = "Yo!", val notary: Party? = nul
             override fun childProgressTracker() = FinalityFlow.tracker()
         }
 
-        fun tracker() = ProgressTracker(CREATING, SIGNING, VERIFYING, FINALISING)
+        fun tracker() = ProgressTracker(CREATING, SIGNING, FINALISING, VERIFYING)
     }
 
     @Suspendable
@@ -118,6 +118,8 @@ class YoFlow(val target: Party, val yo: String = "Yo!", val notary: Party? = nul
 
         progressTracker.currentStep = FINALISING
         val finalTx = subFlow(FinalityFlow(fullySignedTx, setOf(target), FINALISING.childProgressTracker()))
+
+        progressTracker.currentStep = VERIFYING
         finalTx.verify(serviceHub)
         return finalTx
     }
@@ -142,12 +144,12 @@ class YoMoveFlow(val originalYo: String, val newTarget: Party, val notary: Party
         object SIGNING : ProgressTracker.Step("Signing the Yo move!") {
             override fun childProgressTracker() = CollectSignaturesFlow.tracker()
         }
-        object VERIFYING : ProgressTracker.Step("Verifying the Yo!")
         object FINALISING : ProgressTracker.Step("Sending the Yo!") {
             override fun childProgressTracker() = FinalityFlow.tracker()
         }
+        object VERIFYING : ProgressTracker.Step("Verifying the Yo!")
 
-        fun tracker() = ProgressTracker(FINDING, CREATING, SIGNING, VERIFYING, FINALISING)
+        fun tracker() = ProgressTracker(FINDING, CREATING, SIGNING, FINALISING, VERIFYING)
     }
 
     @Suspendable
@@ -176,14 +178,15 @@ class YoMoveFlow(val originalYo: String, val newTarget: Party, val notary: Party
 
         progressTracker.currentStep = SIGNING
         val stx = serviceHub.signInitialTransaction(utx)
+        // Make sure we get the right signatures.
         val newCounterpartySession = initiateFlow(newTarget)
         val oldCounterpartySession = initiateFlow(oldYo.state.data.origin)
         val fullySignedTx: SignedTransaction = subFlow(CollectSignaturesFlow(stx, setOf(newCounterpartySession, oldCounterpartySession), SIGNING.childProgressTracker()))
 
-        progressTracker.currentStep = VERIFYING
-
         progressTracker.currentStep = FINALISING
         val finalTx = subFlow(FinalityFlow(fullySignedTx, setOf(newTarget), FINALISING.childProgressTracker()))
+
+        progressTracker.currentStep = VERIFYING
         finalTx.verify(serviceHub)
         return finalTx
     }
@@ -209,7 +212,7 @@ class YoNotaryChangeFlow(val originalYo: String, val newNotary: Party) : FlowLog
             override fun childProgressTracker() = FinalityFlow.tracker()
         }
 
-        fun tracker() = ProgressTracker(FINDING, RENOTARISING, VERIFYING, FINALISING)
+        fun tracker() = ProgressTracker(FINDING, RENOTARISING)
     }
 
     @Suspendable

@@ -33,6 +33,7 @@ class NotaryAgreementFlow(private val counterparties: Set<Party>, private val pr
         var potentialNotaries = proposedNotaries
         for (it in counterparties) {
             if (serviceHub.myInfo.legalIdentities.contains(it)) {
+                // We shouldn't try to communicate with ourselves, so we skip ourself in the counterparties.
                 continue
             }
             val counterpartySession = initiateFlow(it)
