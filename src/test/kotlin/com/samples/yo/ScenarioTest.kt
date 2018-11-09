@@ -62,22 +62,14 @@ class NotaryChangeScenario {
         val bTx = b.services.validatedTransactions.getTransaction(stx.id)
         assertEquals(bTx, stx)
 
-        // B decides to move the transaction to their associated entity, C.
-        val moveFlow = YoMoveFlow(bTx!!.id.toString(), c.info.legalIdentities.first(), notary = oldNotary.info.legalIdentities.first())
+        // B decides to move the transaction to their associated entity, C. C needs to use the BoE notary, so it switches over.
+        val moveFlow = YoMoveWithNotaryChangeFlow(bTx!!.id.toString(), c.info.legalIdentities.first(), newNotary.info.legalIdentities.first())
         val moveFuture = b.startFlow(moveFlow)
         network.runNetwork()
         val mstx = moveFuture.getOrThrow()
         val cTx = c.services.validatedTransactions.getTransaction(mstx.id)
         assertEquals(cTx, mstx)
-
-        // The parties realise they have a legal obligation to use the BoE as a notary instead of the Fed, and so move to change the notary.
-        val notaryChangeFlow = YoNotaryChangeFlow(cTx!!.id.toString(), newNotary.info.legalIdentities.first())
-        val notaryChangeFuture = c.startFlow(notaryChangeFlow)
-        network.runNetwork()
-        val ncstx = notaryChangeFuture.getOrThrow()
-        ncstx.forEach {
-            assertEquals(newNotary.info.legalIdentities.first(), it.state.notary)
-        }
+        assertEquals(cTx!!.notary, newNotary.info.legalIdentities.first())
     }
 }
 

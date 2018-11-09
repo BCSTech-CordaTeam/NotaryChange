@@ -1,9 +1,9 @@
-group 'com.github.roger3cev'
+group 'com.samples.yo'
 version '4'
 
 buildscript {
     ext.corda_release_group = 'net.corda'
-    ext.corda_release_version = '3.2-corda'
+    ext.corda_release_version = '3.3-corda'
     ext.corda_gradle_plugins_version = '3.2.1'
     ext.kotlin_version = '1.1.60'
     ext.quasar_version = '0.7.6'
@@ -107,8 +107,7 @@ task deployNodes(type: net.corda.plugins.Cordform, dependsOn: ['jar']) {
             address("localhost:10006")
             adminAddress("localhost:10046")
         }
-        webPort 10007
-        cordapps = ["net.corda.core.flows"]
+        cordapps = []
         rpcUsers = [[ user: "user1", "password": "test", "permissions": ["ALL"]]]
     }
     node {
@@ -118,8 +117,7 @@ task deployNodes(type: net.corda.plugins.Cordform, dependsOn: ['jar']) {
             address("localhost:10009")
             adminAddress("localhost:10049")
         }
-        webPort 10010
-        cordapps = ["net.corda.core.flows"]
+        cordapps = []
         rpcUsers = [[ user: "user1", "password": "test", "permissions": ["ALL"]]]
     }
     node {
@@ -129,20 +127,7 @@ task deployNodes(type: net.corda.plugins.Cordform, dependsOn: ['jar']) {
             address("localhost:10017")
             adminAddress("localhost:10053")
         }
-        webPort 10010
-        cordapps = ["net.corda.core.flows"]
+        cordapps = []
         rpcUsers = [[ user: "user1", "password": "test", "permissions": ["ALL"]]]
     }
-}
-
-task runYoRPCNodeA(type: JavaExec) {
-    classpath = sourceSets.main.runtimeClasspath
-    main = 'net.corda.yo.ClientKt'
-    args 'localhost:10006'
-}
-
-task runYoRPCNodeB(type: JavaExec) {
-    classpath = sourceSets.main.runtimeClasspath
-    main = 'net.corda.yo.ClientKt'
-    args 'localhost:10009'
 }

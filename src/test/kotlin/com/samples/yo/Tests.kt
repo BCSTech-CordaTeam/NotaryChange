@@ -17,19 +17,27 @@ import org.junit.Test
 import kotlin.test.assertEquals
 
 val NOTARY_NAME = CordaX500Name("NotaryA", "New York", "US")
+val OTHER_NOTARY_NAME = CordaX500Name("NotaryB", "New York", "US")
 
 class YoFlowTests {
     lateinit var network: MockNetwork
     lateinit var a: StartedMockNode
     lateinit var b: StartedMockNode
     lateinit var c: StartedMockNode
+    lateinit var n: StartedMockNode
+    lateinit var on: StartedMockNode
 
     @Before
     fun setup() {
-        network = MockNetwork(cordappPackages = listOf("com.samples.yo"), notarySpecs = listOf(MockNetworkNotarySpec(NOTARY_NAME, validating = false)))
+        network = MockNetwork(cordappPackages = listOf("com.samples.yo"), notarySpecs = listOf(
+                MockNetworkNotarySpec(NOTARY_NAME, validating = false),
+                MockNetworkNotarySpec(OTHER_NOTARY_NAME, validating = false)
+        ))
         a = network.createPartyNode()
         b = network.createPartyNode()
         c = network.createPartyNode()
+        n = network.notaryNodes.find { it.info.legalIdentities.first().name == NOTARY_NAME } ?: throw Exception("Could not find main notary.")
+        on = network.notaryNodes.find { it.info.legalIdentities.first().name == OTHER_NOTARY_NAME } ?: throw Exception("Could not find other notary.")
         network.runNetwork()
     }
 
@@ -86,6 +94,43 @@ class YoFlowTests {
         val bstx = bfuture.getOrThrow()
         val cTx = c.services.validatedTransactions.getTransaction(bstx.id)
         assertEquals(cTx, bstx)
+        c.transaction {
+            // Check yo state is stored in the vault.
+            // Simple query.
+            val cYo = c.services.vaultService.queryBy<YoState>().states.single().state.data
+            val newYo = yo.copy(origin = b.info.legalIdentities.first(), target = c.info.legalIdentities.first())
+            assertEquals(cYo.toString(), newYo.toString())
+        }
+    }
+
+    @Test
+    fun moveAndChangeFlowWorksCorrectly() {
+        val yo = YoState(a.info.legalIdentities.first(), b.info.legalIdentities.first())
+        val flow = YoFlow(b.info.legalIdentities.first(), notary = n.info.legalIdentities.first())
+        val future = a.startFlow(flow)
+        network.runNetwork()
+        val stx = future.getOrThrow()
+
+        // Check yo transaction is stored in the storage service.
+        val bTx = b.services.validatedTransactions.getTransaction(stx.id)
+        // Check bTx is using the main notary.
+        assertEquals(bTx, stx)
+        assertEquals(bTx!!.notary, n.info.legalIdentities.first())
+        b.transaction {
+            // Check yo state is stored in the vault.
+            // Simple query.
+            val bYo = b.services.vaultService.queryBy<YoState>().states.single().state.data
+            assertEquals(bYo.toString(), yo.toString())
+        }
+
+        val moveAndChangeFlow = YoMoveWithNotaryChangeFlow(bTx.id.toString(), c.info.legalIdentities.first(), on.info.legalIdentities.first())
+        val bfuture = b.startFlow(moveAndChangeFlow)
+        network.runNetwork()
+        val bstx = bfuture.getOrThrow()
+        val cTx = c.services.validatedTransactions.getTransaction(bstx.id)
+        assertEquals(cTx, bstx)
+        // Check cTx is using the new notary.
+        assertEquals(cTx!!.notary, on.info.legalIdentities.first())
         c.transaction {
             // Check yo state is stored in the vault.
             // Simple query.

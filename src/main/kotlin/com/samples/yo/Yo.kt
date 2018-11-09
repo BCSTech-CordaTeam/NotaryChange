@@ -158,14 +158,13 @@ class YoMoveFlow(val originalYo: String, val newTarget: Party, val notary: Party
 
         progressTracker.currentStep = FINDING
         val tx = serviceHub.validatedTransactions.getTransaction(originalYo)?.toLedgerTransaction(serviceHub)
-                ?: throw FlowException("Could not get transation.")
+                ?: throw FlowException("Could not get transaction.")
 
         if (!(tx.commands.single().value is YoContract.Move || tx.commands.single().value is YoContract.Send)) {
             throw FlowException("Transaction specified was not a Yo move or a Yo send.")
         }
 
         val oldYo = tx.outRef<YoState>(0)
-
 
         progressTracker.currentStep = CREATING
         val me = serviceHub.myInfo.legalIdentities.first()
@@ -193,30 +192,34 @@ class YoMoveFlow(val originalYo: String, val newTarget: Party, val notary: Party
 }
 
 /**
- * Changes a chain of Yo!s to use a single, specific notary.
+ * Perform a Yo! Move while also explicitly changing the notary used for the original Yo!
  *
  * @property originalYo The txHash (transaction id) of an existing send or move containing the yo to move. We currently take this as a string due to an issue in the Corda Shell.
- * @property newNotary The notary to attempt to renotarise the chain of transactions with.
+ * @property newNotary The notary to attempt to renotarise the Yo! with.
  */
 @InitiatingFlow
 @StartableByRPC
-class YoNotaryChangeFlow(val originalYo: String, val newNotary: Party) : FlowLogic<List<StateAndRef<YoState>>>() {
+class YoMoveWithNotaryChangeFlow(val originalYo: String, val newTarget: Party, val newNotary: Party) : FlowLogic<SignedTransaction>() {
 
     override val progressTracker: ProgressTracker = tracker()
 
     companion object {
         object FINDING : ProgressTracker.Step("Finding the original Yo!")
-        object RENOTARISING : ProgressTracker.Step("Changing notary for original Yo.")
-        object VERIFYING : ProgressTracker.Step("Verifying the Yo!")
-        object FINALISING : ProgressTracker.Step("Sending the Yo!") {
+        object RENOTARISING : ProgressTracker.Step("Changing notary for original Yo!")
+        object CREATING : ProgressTracker.Step("Creating the Yo! move")
+        object SIGNING : ProgressTracker.Step("Signing the Yo! move") {
+            override fun childProgressTracker() = CollectSignaturesFlow.tracker()
+        }
+        object FINALISING : ProgressTracker.Step("Moving the Yo!") {
             override fun childProgressTracker() = FinalityFlow.tracker()
         }
+        object VERIFYING : ProgressTracker.Step("Verifying the Yo!")
 
-        fun tracker() = ProgressTracker(FINDING, RENOTARISING)
+        fun tracker() = ProgressTracker(FINDING, RENOTARISING, CREATING, SIGNING, FINALISING, VERIFYING)
     }
 
     @Suspendable
-    override fun call(): List<StateAndRef<YoState>> {
+    override fun call(): SignedTransaction {
         val originalYo = SecureHash.parse(originalYo)
 
         progressTracker.currentStep = FINDING
@@ -228,8 +231,30 @@ class YoNotaryChangeFlow(val originalYo: String, val newNotary: Party) : FlowLog
         }
 
         progressTracker.currentStep = RENOTARISING
-        // Pawn the process off to a more general flow.
-        return subFlow(TransactionInputNotaryChangeFlow(tx, setOf(newNotary))).map { serviceHub.toStateAndRef<YoState>(it.ref) }
+        val oldYo = tx.outRef<YoState>(0)
+        val renotarisedYo = subFlow(NotaryChangeFlow(oldYo, newNotary))
+
+        progressTracker.currentStep = CREATING
+        val me = serviceHub.myInfo.legalIdentities.first()
+        val movedYo = oldYo.state.data.copy(origin = me, target = newTarget)
+        val command = Command(YoContract.Move(), listOf(me.owningKey))
+        val utx = TransactionBuilder(notary = newNotary)
+                .withItems(command, StateAndContract(movedYo, YO_CONTRACT_ID))
+                .addInputState(renotarisedYo)
+
+        progressTracker.currentStep = SIGNING
+        val stx = serviceHub.signInitialTransaction(utx)
+        // Make sure we get the right signatures.
+        val newCounterpartySession = initiateFlow(newTarget)
+        val oldCounterpartySession = initiateFlow(oldYo.state.data.origin)
+        val fullySignedTx: SignedTransaction = subFlow(CollectSignaturesFlow(stx, setOf(newCounterpartySession, oldCounterpartySession), SIGNING.childProgressTracker()))
+
+        progressTracker.currentStep = FINALISING
+        val finalTx = subFlow(FinalityFlow(fullySignedTx, setOf(newTarget), FINALISING.childProgressTracker()))
+
+        progressTracker.currentStep = VERIFYING
+        finalTx.verify(serviceHub)
+        return finalTx
     }
 }
 
