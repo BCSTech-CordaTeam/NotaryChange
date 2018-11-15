@@ -126,73 +126,31 @@ class YoFlow(val target: Party, val yo: String = "Yo!", val notary: Party? = nul
 }
 
 /**
- * Moves an existing Yo! to a new target.
+ * Forwards an existing Yo! to a new target.
  *
  * @property originalYo The txHash (transaction id) of an existing send or forward containing the yo to forward. We currently take this as a string due to an issue in the Corda Shell.
  * @property newTarget The new party to forward the yo to.
- * @property notary The notary to use for this forward. If null, the initiating node will choose one randomly.
  */
 @InitiatingFlow
 @StartableByRPC
-class YoForwardFlow(val originalYo: String, val newTarget: Party, val notary: Party? = null) : FlowLogic<SignedTransaction>() {
-
+class YoForwardFlow(val originalYo: String, val newTarget: Party) : FlowLogic<SignedTransaction>() {
     override val progressTracker: ProgressTracker = tracker()
 
     companion object {
-        object FINDING : ProgressTracker.Step("Finding the original Yo!")
-        object CREATING : ProgressTracker.Step("Creating the new Yo!")
-        object SIGNING : ProgressTracker.Step("Signing the Yo forward!") {
-            override fun childProgressTracker() = CollectSignaturesFlow.tracker()
-        }
-        object FINALISING : ProgressTracker.Step("Sending the Yo!") {
-            override fun childProgressTracker() = FinalityFlow.tracker()
-        }
-        object VERIFYING : ProgressTracker.Step("Verifying the Yo!")
+        object FORWARDING : ProgressTracker.Step("Forwarding the Yo!")
 
-        fun tracker() = ProgressTracker(FINDING, CREATING, SIGNING, FINALISING, VERIFYING)
+        fun tracker() = ProgressTracker(FORWARDING)
     }
 
     @Suspendable
     override fun call(): SignedTransaction {
-        val originalYo = SecureHash.parse(originalYo)
-
-        progressTracker.currentStep = FINDING
-        val tx = serviceHub.validatedTransactions.getTransaction(originalYo)?.toLedgerTransaction(serviceHub)
-                ?: throw FlowException("Could not get transaction.")
-
-        if (!(tx.commands.single().value is YoContract.Forward || tx.commands.single().value is YoContract.Send)) {
-            throw FlowException("Transaction specified was not a Yo forward or a Yo send.")
-        }
-
-        val oldYo = tx.outRef<YoState>(0)
-
-        progressTracker.currentStep = CREATING
-        val me = serviceHub.myInfo.legalIdentities.first()
-        val notary = notary ?: serviceHub.networkMapCache.notaryIdentities.last()
-        val newYo = oldYo.state.data.copy(origin = me, target = newTarget)
-        val command = Command(YoContract.Forward(), listOf(me.owningKey))
-        val utx = TransactionBuilder(notary = notary)
-                .withItems(command, StateAndContract(newYo, YO_CONTRACT_ID))
-                .addInputState(oldYo)
-
-        progressTracker.currentStep = SIGNING
-        val stx = serviceHub.signInitialTransaction(utx)
-        // Make sure we get the right signatures.
-        val newCounterpartySession = initiateFlow(newTarget)
-        val oldCounterpartySession = initiateFlow(oldYo.state.data.origin)
-        val fullySignedTx: SignedTransaction = subFlow(CollectSignaturesFlow(stx, setOf(newCounterpartySession, oldCounterpartySession), SIGNING.childProgressTracker()))
-
-        progressTracker.currentStep = FINALISING
-        val finalTx = subFlow(FinalityFlow(fullySignedTx, setOf(newTarget), FINALISING.childProgressTracker()))
-
-        progressTracker.currentStep = VERIFYING
-        finalTx.verify(serviceHub)
-        return finalTx
+        progressTracker.currentStep = FORWARDING
+        return subFlow(YoForwardSubFlow(originalYo, newTarget, null))
     }
 }
 
 /**
- * Perform a Yo! Move while also explicitly changing the notary used for the original Yo!
+ * Perform a Yo! Forward while also explicitly changing the notary used for the original Yo!
  *
  * @property originalYo The txHash (transaction id) of an existing send or forward containing the yo to forward. We currently take this as a string due to an issue in the Corda Shell.
  * @property newNotary The notary to attempt to renotarise the Yo! with.
@@ -200,6 +158,31 @@ class YoForwardFlow(val originalYo: String, val newTarget: Party, val notary: Pa
 @InitiatingFlow
 @StartableByRPC
 class YoForwardWithNotaryChangeFlow(val originalYo: String, val newTarget: Party, val newNotary: Party) : FlowLogic<SignedTransaction>() {
+
+    override val progressTracker: ProgressTracker = tracker()
+
+    companion object {
+        object FORWARDING : ProgressTracker.Step("Forwarding the Yo!")
+
+        fun tracker() = ProgressTracker(FORWARDING)
+    }
+
+    @Suspendable
+    override fun call(): SignedTransaction {
+        progressTracker.currentStep = FORWARDING
+        return subFlow(YoForwardSubFlow(originalYo, newTarget, newNotary))
+    }
+}
+
+/**
+ * Perform a Yo! Forward, optionally changing the notary used for the original Yo!
+ *
+ * This is a helper designed to be a subflow. The top-level initiating/RPC-initiatable flows delegate to this.
+ *
+ * @property originalYo The txHash (transaction id) of an existing send or forward containing the yo to forward. We currently take this as a string due to an issue in the Corda Shell.
+ * @property newNotary The notary to attempt to renotarise the Yo! with, or null.
+ */
+class YoForwardSubFlow(val originalYo: String, val newTarget: Party, val newNotary: Party?) : FlowLogic<SignedTransaction>() {
 
     override val progressTracker: ProgressTracker = tracker()
 
@@ -230,15 +213,26 @@ class YoForwardWithNotaryChangeFlow(val originalYo: String, val newTarget: Party
             throw FlowException("Transaction specified was not a Yo forward or a Yo send.")
         }
 
-        progressTracker.currentStep = RENOTARISING
         val oldYo = tx.outRef<YoState>(0)
-        val renotarisedYo = subFlow(NotaryChangeFlow(oldYo, newNotary))
+
+        val renotarisedYo = if (newNotary != null) {
+            progressTracker.currentStep = RENOTARISING
+            subFlow(NotaryChangeFlow(oldYo, newNotary))
+        } else {
+            oldYo
+        }
+
+        val notaryToUse = if (newNotary != null) {
+            newNotary
+        } else {
+            oldYo.state.notary
+        }
 
         progressTracker.currentStep = CREATING
         val me = serviceHub.myInfo.legalIdentities.first()
         val forwardedYo = oldYo.state.data.copy(origin = me, target = newTarget)
         val command = Command(YoContract.Forward(), listOf(me.owningKey))
-        val utx = TransactionBuilder(notary = newNotary)
+        val utx = TransactionBuilder(notary = notaryToUse)
                 .withItems(command, StateAndContract(forwardedYo, YO_CONTRACT_ID))
                 .addInputState(renotarisedYo)
 

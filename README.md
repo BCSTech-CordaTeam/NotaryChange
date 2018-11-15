@@ -19,15 +19,15 @@ We can check this ran successfully on PartyB's shell with
 We make note of the txHash field here, which we will use to refer to this yo from now on.
 
 
-PartyB decides that its associated entity PartyC should handle this vital agreement, and so elects to move the state to them.
+PartyB decides that its associated entity PartyC should handle this vital agreement, and so elects to forward the state to them.
 
-PartyC operates in a regulatory environment where this transaction must be notarised by a notarisation service from the Bank of England, and the MoveFlow requires states from the original Yo, so we must first move those states to this notary before we can proceed.
+PartyC operates in a regulatory environment where this transaction must be notarised by a notarisation service from the Bank of England, and the ForwardFlow requires states from the original Yo, so we must first forward those states to this notary before we can proceed.
 
-As part of the negotiation procedure of this CordApp, it was decided that notary changes should be explicit rather than implicit to avoid errors accidentally causing a switch of notary and bringing regulatory troubles, so we'll use the version of YoMove that explicitly changes the previous inputs' notaries
+As part of the negotiation procedure of this CordApp, it was decided that notary changes should be explicit rather than implicit to avoid errors accidentally causing a switch of notary and bringing regulatory troubles, so we'll use the version of YoForward that explicitly changes the previous inputs' notaries
 
 On PartyB, we run:
 
-`start com.samples.yo.YoMoveWithNotaryChangeFlow originalYo: <txHash>, newTarget: PartyC, newNotary: Bank of England`
+`start com.samples.yo.YoForwardWithNotaryChangeFlow originalYo: <txHash>, newTarget: PartyC, newNotary: Bank of England`
  
 Once again, we'll check that this worked by querying the vault in PartyC's shell.
 
@@ -42,11 +42,11 @@ And we can verify that the notary change has also worked on PartyB's side, and t
 The Cordapp we're using is based on the Yo! Cordapp. For those familiar with that cordapp, it might be helpful to note the following changes:
 
  - States & Flow updated so that both parties are signing participants of the YoStates.
- - Addition of a move command.
- - Addition of a move with notary change command.
+ - Addition of a forward command.
+ - Addition of a forward with notary change command.
 
 # More Details & Automation
 
 We implement this same scenario in the [ScenarioTest.kt](src/test/kotlin/com/samples/yo/ScenarioTest.kt) file, for a bit more insight into how this would look with parts of the Corda API.
-If you'd like more insight into how the actual notary change process occurs, seek out YoMoveWithNotaryChange in [Yo.kt](src/main/kotlin/com/samples/yo/Yo.kt).
+If you'd like more insight into how the actual notary change process occurs, seek out YoForwardWithNotaryChange in [Yo.kt](src/main/kotlin/com/samples/yo/Yo.kt).
 
