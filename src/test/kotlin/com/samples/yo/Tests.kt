@@ -73,7 +73,7 @@ class YoFlowTests {
     }
 
     @Test
-    fun moveFlowWorksCorrectly() {
+    fun forwardFlowWorksCorrectly() {
         val yo = YoState(a.info.legalIdentities.first(), b.info.legalIdentities.first())
         val flow = YoFlow(b.info.legalIdentities.first())
         val future = a.startFlow(flow)
@@ -88,8 +88,8 @@ class YoFlowTests {
             val bYo = b.services.vaultService.queryBy<YoState>().states.single().state.data
             assertEquals(bYo.toString(), yo.toString())
         }
-        val moveFlow = YoMoveFlow(bTx!!.id.toString(), c.info.legalIdentities.first())
-        val bfuture = b.startFlow(moveFlow)
+        val forwardFlow = YoForwardFlow(bTx!!.id.toString(), c.info.legalIdentities.first())
+        val bfuture = b.startFlow(forwardFlow)
         network.runNetwork()
         val bstx = bfuture.getOrThrow()
         val cTx = c.services.validatedTransactions.getTransaction(bstx.id)
@@ -104,7 +104,7 @@ class YoFlowTests {
     }
 
     @Test
-    fun moveAndChangeFlowWorksCorrectly() {
+    fun forwardAndChangeFlowWorksCorrectly() {
         val yo = YoState(a.info.legalIdentities.first(), b.info.legalIdentities.first())
         val flow = YoFlow(b.info.legalIdentities.first(), notary = n.info.legalIdentities.first())
         val future = a.startFlow(flow)
@@ -123,8 +123,8 @@ class YoFlowTests {
             assertEquals(bYo.toString(), yo.toString())
         }
 
-        val moveAndChangeFlow = YoMoveWithNotaryChangeFlow(bTx.id.toString(), c.info.legalIdentities.first(), on.info.legalIdentities.first())
-        val bfuture = b.startFlow(moveAndChangeFlow)
+        val forwardAndChangeFlow = YoForwardWithNotaryChangeFlow(bTx.id.toString(), c.info.legalIdentities.first(), on.info.legalIdentities.first())
+        val bfuture = b.startFlow(forwardAndChangeFlow)
         network.runNetwork()
         val bstx = bfuture.getOrThrow()
         val cTx = c.services.validatedTransactions.getTransaction(bstx.id)
@@ -188,7 +188,7 @@ class YoContractTests {
     }
 
     @Test
-    fun yoMoveTransactionMustBeWellFormed() {
+    fun yoForwardTransactionMustBeWellFormed() {
         // A pre-made Yo to Bob.
         val yo = YoState(alice.party, bob.party)
         // Tests.
@@ -197,39 +197,39 @@ class YoContractTests {
             transaction {
                 input(YO_CONTRACT_ID, yo)
                 output(YO_CONTRACT_ID, YoState(bob.party, bob.party))
-                command(bob.publicKey, YoContract.Move())
+                command(bob.publicKey, YoContract.Forward())
                 this.failsWith("Yo must actually go to a new target")
             }
             // Needs an input.
             transaction {
                 output(YO_CONTRACT_ID, YoState(bob.party, claire.party))
-                command(bob.publicKey, YoContract.Move())
+                command(bob.publicKey, YoContract.Forward())
                 this.failsWith("There must be one input: The original Yo")
             }
             // Needs and output.
             transaction {
                 input(YO_CONTRACT_ID, yo)
-                command(bob.publicKey, YoContract.Move())
-                this.failsWith("There must be one output: The moved Yo")
+                command(bob.publicKey, YoContract.Forward())
+                this.failsWith("There must be one output: The forwarded Yo")
             }
             // Can't change the yo.
             transaction {
                 input(YO_CONTRACT_ID, yo)
                 output(YO_CONTRACT_ID, YoState(bob.party, claire.party, "What"))
-                command(bob.publicKey, YoContract.Move())
+                command(bob.publicKey, YoContract.Forward())
                 this.failsWith("Input and output Yo's must be equal aside from origin and target")
             }
             // Signed by the right person.
             transaction {
                 input(YO_CONTRACT_ID, yo)
                 output(YO_CONTRACT_ID, YoState(bob.party, claire.party))
-                command(alice.publicKey, YoContract.Move())
-                this.failsWith("The Yo! must be signed by the mover")
+                command(alice.publicKey, YoContract.Forward())
+                this.failsWith("The Yo! must be signed by the forwarder")
             }
             transaction {
                 input(YO_CONTRACT_ID, yo)
                 output(YO_CONTRACT_ID, YoState(bob.party, claire.party))
-                command(bob.publicKey, YoContract.Move())
+                command(bob.publicKey, YoContract.Forward())
                 this.verifies()
             }
         }

@@ -53,7 +53,7 @@ class NotaryChangeScenario {
     }
 
     @Test
-    fun moveScenario() {
+    fun forwardScenario() {
         // A sends an extremely important binding legal contract to B
         val flow = YoFlow(b.info.legalIdentities.first(), "I'll give you $100,000,000", notary = oldNotary.info.legalIdentities.first())
         val future = a.startFlow(flow)
@@ -62,11 +62,11 @@ class NotaryChangeScenario {
         val bTx = b.services.validatedTransactions.getTransaction(stx.id)
         assertEquals(bTx, stx)
 
-        // B decides to move the transaction to their associated entity, C. C needs to use the BoE notary, so it switches over.
-        val moveFlow = YoMoveWithNotaryChangeFlow(bTx!!.id.toString(), c.info.legalIdentities.first(), newNotary.info.legalIdentities.first())
-        val moveFuture = b.startFlow(moveFlow)
+        // B decides to forward the transaction to their associated entity, C. C needs to use the BoE notary, so it switches over.
+        val forwardFlow = YoForwardWithNotaryChangeFlow(bTx!!.id.toString(), c.info.legalIdentities.first(), newNotary.info.legalIdentities.first())
+        val forwardFuture = b.startFlow(forwardFlow)
         network.runNetwork()
-        val mstx = moveFuture.getOrThrow()
+        val mstx = forwardFuture.getOrThrow()
         val cTx = c.services.validatedTransactions.getTransaction(mstx.id)
         assertEquals(cTx, mstx)
         assertEquals(cTx!!.notary, newNotary.info.legalIdentities.first())
